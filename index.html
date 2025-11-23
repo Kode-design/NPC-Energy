@@ -24,11 +24,16 @@
             position: relative;
             box-shadow: 0 0 20px rgba(0,0,0,0.8);
             border: 4px solid #333;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 16 / 9;
         }
 
         canvas {
             display: block;
             image-rendering: pixelated; 
+            width: 100%;
+            height: 100%;
         }
 
         #ui-layer {
@@ -174,6 +179,9 @@ const keys = {
 };
 
 window.addEventListener('keydown', (e) => {
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        e.preventDefault();
+    }
     if(e.code === 'Space') handleInteraction();
     if(keys.hasOwnProperty(e.code)) keys[e.code] = true;
 });
@@ -370,12 +378,99 @@ class Car extends Entity {
 }
 
 // Reuse existing classes for hall
-class OddGirl extends Entity { constructor(x,y) { super(x,y,26,44,'#bdc3c7'); this.patrolStart=x-100; this.patrolEnd=x+100; this.speed=1.0;} update() { this.x+=this.speed*this.direction; this.isMoving=true; if(this.x>this.patrolEnd)this.direction=-1; if(this.x<this.patrolStart)this.direction=1; } drawSprite(ctx,x,y) { drawPixelRect(ctx,x+2,y+16,22,18,'#95a5a6'); drawPixelRect(ctx,x+4,y+34,18,6,'#34495e'); drawPixelRect(ctx,x+6,y+40,4,4,'#f1c27d'); drawPixelRect(ctx,x+16,y+40,4,4,'#f1c27d'); drawPixelRect(ctx,x+3,y,20,18,'#f1c27d'); drawPixelRect(ctx,x+1,y-2,24,8,'#6d4c41'); drawPixelRect(ctx,x,y+4,4,10,'#6d4c41'); drawPixelRect(ctx,x+22,y+4,4,10,'#6d4c41'); drawPixelRect(ctx,x-2,y+4,5,10,'#ecf0f1'); drawPixelRect(ctx,x+23,y+4,5,10,'#ecf0f1'); drawPixelRect(ctx,x+2,y-3,22,2,'#bdc3c7'); }}
-class Freddy extends Entity { constructor(x,y) { super(x,y,50,70,'#c0392b'); } drawSprite(ctx,x,y) { drawPixelRect(ctx,x,y+15,50,40,'#c0392b'); drawPixelRect(ctx,x-5,y+15,10,30,'#fff'); drawPixelRect(ctx,x+45,y+15,10,30,'#fff'); drawPixelRect(ctx,x+10,y+55,30,15,'#bdc3c7'); drawPixelRect(ctx,x+15,y,20,20,'#f1c27d'); drawPixelRect(ctx,x+15,y-4,20,8,'#f1c40f'); }}
-class Daniel extends Entity { constructor(x,y) { super(x,y,35,60,'#f1c40f'); this.startPos=x; } update() { if(this.x>-100){this.x-=2; this.isMoving=true; this.direction=-1;}else{this.visible=false;}} drawSprite(ctx,x,y) { drawPixelRect(ctx,x,y+15,35,30,'#f1c40f'); drawPixelRect(ctx,x+10,y+45,15,15,'#fff'); drawPixelRect(ctx,x+5,y,25,20,'#f1c27d'); drawPixelRect(ctx,x+2,y-4,30,8,'#d4ac0d'); if(this.direction===-1)drawPixelRect(ctx,x+4,y+6,10,4,'#000'); }}
-class Mindy extends Entity { constructor(x,y) { super(x,y,30,55,'#e74c3c'); } update() { if(this.x>-100){this.x-=2; this.isMoving=true; this.direction=-1;}else{this.visible=false;}} drawSprite(ctx,x,y) { drawPixelRect(ctx,x+5,y+15,20,20,'#fff'); drawPixelRect(ctx,x+8,y+18,14,2,'#e74c3c'); drawPixelRect(ctx,x+2,y+35,26,10,'#e74c3c'); drawPixelRect(ctx,x+5,y+45,6,10,'#dcb'); drawPixelRect(ctx,x+19,y+45,6,10,'#dcb'); drawPixelRect(ctx,x+5,y,20,18,'#f1c27d'); drawPixelRect(ctx,x+2,y-2,26,25,'#d35400'); drawPixelRect(ctx,x+20,y-5,8,8,'#fff'); }}
-class Weeb extends Entity { constructor(x,y) { super(x,y,30,55,'#8e44ad'); this.patrolStart=x-300; this.patrolEnd=x+300; this.speed=6; } update() { this.x+=this.speed*this.direction; this.isMoving=true; if(this.x>this.patrolEnd)this.direction=-1; if(this.x<this.patrolStart)this.direction=1; } drawSprite(ctx,x,y) { const lean=10*this.direction; drawPixelRect(ctx,x+lean,y+25,25,20,'#2c3e50'); drawPixelRect(ctx,x+lean+8,y+30,8,5,'#c0392b'); drawPixelRect(ctx,x+2+lean,y+5,24,20,'#f1c27d'); drawPixelRect(ctx,x+lean,y+2,28,6,'#95a5a6'); drawPixelRect(ctx,x+lean-2,y+4,32,2,'#2c3e50'); if(this.direction===1){drawPixelRect(ctx,x-10+lean,y+25,15,6,'#f1c27d');}else{drawPixelRect(ctx,x+20+lean,y+25,15,6,'#f1c27d');} drawPixelRect(ctx,x+5,y+45,8,10,'#111'); drawPixelRect(ctx,x+15,y+45,8,10,'#111'); }}
+class OddGirl extends Entity {
+    constructor(x,y) {
+        super(x,y,26,44,'#bdc3c7');
+        this.patrolStart=x-100;
+        this.patrolEnd=x+100;
+        this.speed=1.0;
+    }
+    update() {
+        this.x+=this.speed*this.direction;
+        this.isMoving=true;
+        if(this.x>this.patrolEnd)this.direction=-1;
+        if(this.x<this.patrolStart)this.direction=1;
+    }
+    drawSprite(ctx,x,y) {
+        drawPixelRect(ctx,x+2,y+16,22,18,'#95a5a6');
+        drawPixelRect(ctx,x+4,y+34,18,6,'#34495e');
+        drawPixelRect(ctx,x+6,y+40,4,4,'#f1c27d');
+        drawPixelRect(ctx,x+16,y+40,4,4,'#f1c27d');
+        drawPixelRect(ctx,x+3,y,20,18,'#f1c27d');
+        drawPixelRect(ctx,x+1,y-2,24,8,'#6d4c41');
+        drawPixelRect(ctx,x,y+4,4,10,'#6d4c41');
+        drawPixelRect(ctx,x+22,y+4,4,10,'#6d4c41');
+        drawPixelRect(ctx,x-2,y+4,5,10,'#ecf0f1');
+        drawPixelRect(ctx,x+23,y+4,5,10,'#ecf0f1');
+        drawPixelRect(ctx,x+2,y-3,22,2,'#bdc3c7');
+    }
+}
+
+class Freddy extends Entity {
+    constructor(x,y) { super(x,y,50,70,'#c0392b'); }
+    drawSprite(ctx,x,y) {
+        drawPixelRect(ctx,x,y+15,50,40,'#c0392b');
+        drawPixelRect(ctx,x-5,y+15,10,30,'#fff');
+        drawPixelRect(ctx,x+45,y+15,10,30,'#fff');
+        drawPixelRect(ctx,x+10,y+55,30,15,'#bdc3c7');
+        drawPixelRect(ctx,x+15,y,20,20,'#f1c27d');
+        drawPixelRect(ctx,x+15,y-4,20,8,'#f1c40f');
+    }
+}
+
+class Daniel extends Entity {
+    constructor(x,y) { super(x,y,35,60,'#f1c40f'); this.startPos=x; }
+    update() { if(this.x>-100){this.x-=2; this.isMoving=true; this.direction=-1;}else{this.visible=false;}}
+    drawSprite(ctx,x,y) {
+        drawPixelRect(ctx,x,y+15,35,30,'#f1c40f');
+        drawPixelRect(ctx,x+10,y+45,15,15,'#fff');
+        drawPixelRect(ctx,x+5,y,25,20,'#f1c27d');
+        drawPixelRect(ctx,x+2,y-4,30,8,'#d4ac0d');
+        if(this.direction===-1)drawPixelRect(ctx,x+4,y+6,10,4,'#000');
+    }
+}
+
+class Mindy extends Entity {
+    constructor(x,y) { super(x,y,30,55,'#e74c3c'); }
+    update() { if(this.x>-100){this.x-=2; this.isMoving=true; this.direction=-1;}else{this.visible=false;}}
+    drawSprite(ctx,x,y) {
+        drawPixelRect(ctx,x+5,y+15,20,20,'#fff');
+        drawPixelRect(ctx,x+8,y+18,14,2,'#e74c3c');
+        drawPixelRect(ctx,x+2,y+35,26,10,'#e74c3c');
+        drawPixelRect(ctx,x+5,y+45,6,10,'#dcb');
+        drawPixelRect(ctx,x+19,y+45,6,10,'#dcb');
+        drawPixelRect(ctx,x+5,y,20,18,'#f1c27d');
+        drawPixelRect(ctx,x+2,y-2,26,25,'#d35400');
+        drawPixelRect(ctx,x+20,y-5,8,8,'#fff');
+    }
+}
+
+class Weeb extends Entity {
+    constructor(x,y) { super(x,y,30,55,'#8e44ad'); this.patrolStart=x-300; this.patrolEnd=x+300; this.speed=6; }
+    update() { this.x+=this.speed*this.direction; this.isMoving=true; if(this.x>this.patrolEnd)this.direction=-1; if(this.x<this.patrolStart)this.direction=1; }
+    drawSprite(ctx,x,y) {
+        const lean=10*this.direction;
+        drawPixelRect(ctx,x+lean,y+25,25,20,'#2c3e50');
+        drawPixelRect(ctx,x+lean+8,y+30,8,5,'#c0392b');
+        drawPixelRect(ctx,x+2+lean,y+5,24,20,'#f1c27d');
+        drawPixelRect(ctx,x+lean,y+2,28,6,'#95a5a6');
+        drawPixelRect(ctx,x+lean-2,y+4,32,2,'#2c3e50');
+        if(this.direction===1){drawPixelRect(ctx,x-10+lean,y+25,15,6,'#f1c27d');}else{drawPixelRect(ctx,x+20+lean,y+25,15,6,'#f1c27d');}
+        drawPixelRect(ctx,x+5,y+45,8,10,'#111');
+        drawPixelRect(ctx,x+15,y+45,8,10,'#111');
+    }
+}
 class GenericStudent extends Entity { constructor(x,y) { const height=50+Math.random()*15; const color=`hsl(${Math.random()*360},40%,40%)`; super(x,y,30,height,color); this.speed=1+Math.random(); this.patrolRange=300; this.startX=x; } update() { this.x+=this.speed*this.direction; this.isMoving=true; if(this.x>this.startX+this.patrolRange)this.direction=-1; if(this.x<this.startX-this.patrolRange)this.direction=1; } drawSprite(ctx,x,y) { drawPixelRect(ctx,x+5,y+20,20,this.height-30,this.color); drawPixelRect(ctx,x+5,y+(this.height-10),20,10,'#2c3e50'); drawPixelRect(ctx,x+2,y,26,20,'#f1c27d'); drawPixelRect(ctx,x,y-4,30,8,'#3e2723'); }}
+
+class Locker extends Entity {
+    constructor(x, y) {
+        super(x, y, 40, 200, '#34495e');
+        this.isTarget = true;
+    }
+    drawSprite(ctx, x, y) {
+        // It's drawn in background, but we can add a highlight
+    }
+}
 
 // --- SCENE ASSETS ---
 function drawHomeBackground(ctx) {
@@ -509,6 +604,35 @@ const SCRIPTS = {
         { speaker: 'Timothy', text: "Watch this. Main Character energy loading..." },
         { speaker: 'Khristopher', text: "Oh no. Please don't trip." },
         { speaker: 'Timothy', text: "I never tri-- *stumbles slightly* I meant to do that." }
+    ],
+
+    // NPC INTERACTIONS
+    NPC_WEEB: [
+        { speaker: 'Weeb', text: "Naruto running is actually faster if you calculate the drag coefficient." },
+        { speaker: 'Timothy', text: "I'll keep that in mind." }
+    ],
+    NPC_ODDGIRL: [
+        { speaker: 'Odd Girl', text: "The lockers are humming today. Can you hear them?" },
+        { speaker: 'Timothy', text: "Uh... no?" },
+        { speaker: 'Odd Girl', text: "They're hungry." }
+    ],
+    NPC_GENERIC: [
+        { speaker: 'Student', text: "I hope the cafeteria has pizza today." }
+    ],
+    NPC_FREDDY: [
+        { speaker: 'Freddy', text: "Watch it, dweeb." },
+        { speaker: 'Timothy', text: "Sorry, Freddy." },
+        { speaker: 'Freddy', text: "Keep walking. The air around you is depressing." }
+    ],
+
+    // ENDING
+    LOCKER_FOUND: [
+        { speaker: 'Timothy', text: "Finally. Locker 404. Found it." },
+        { speaker: 'Khristopher', text: "Locker not found. Joke." },
+        { speaker: 'Timothy', text: "Very funny." },
+        { speaker: 'Timothy', text: "Well, I survived the morning. Maybe I'm not just an NPC." },
+        { speaker: 'System', text: "CHAPTER 1 COMPLETE" },
+        { speaker: 'System', text: "Thanks for playing!" }
     ]
 };
 
@@ -530,11 +654,13 @@ const roamingNPCs = [
     new GenericStudent(1100, 300),
     new GenericStudent(1500, 300)
 ];
+const targetLocker = new Locker(2800, 350);
 
 // --- LOGIC ---
 let dialogueQueue = [];
 let interactionActive = false;
 let sceneTriggered = false;
+let pendingInteraction = null; // Stores the interaction function if player presses space
 
 // NOTE: Initial start call moved to end of script to wait for UI init
 
@@ -592,15 +718,54 @@ function update() {
         mindy.update();
         roamingNPCs.forEach(npc => npc.update());
         
+        checkInteractions();
+
         camera.x = player.x - 200;
         if (camera.x < 0) camera.x = 0;
     }
-
-    updateUI();
 }
 
-function updateUI() {
-    // UI logic 
+function checkInteractions() {
+    if (gameState !== 'playing') return;
+
+    let interactionFound = false;
+    const interactionDist = 60;
+
+    // Check Freddy
+    if (Math.abs(player.x - freddy.x) < interactionDist) {
+        uiPrompt.innerText = "PRESS SPACE";
+        uiPrompt.style.display = 'block';
+        pendingInteraction = () => startDialogue(SCRIPTS.NPC_FREDDY);
+        interactionFound = true;
+    }
+    // Check Locker
+    else if (Math.abs(player.x - targetLocker.x) < interactionDist) {
+        uiPrompt.innerText = "OPEN LOCKER";
+        uiPrompt.style.display = 'block';
+        pendingInteraction = () => startDialogue(SCRIPTS.LOCKER_FOUND);
+        interactionFound = true;
+    }
+    else {
+        // Check NPCs
+    const allNPCs = [...roamingNPCs, mindy];
+    for (let npc of allNPCs) {
+             if (Math.abs(player.x - npc.x) < interactionDist) {
+                uiPrompt.innerText = "TALK";
+                uiPrompt.style.display = 'block';
+                if (npc instanceof Weeb) pendingInteraction = () => startDialogue(SCRIPTS.NPC_WEEB);
+                else if (npc instanceof OddGirl) pendingInteraction = () => startDialogue(SCRIPTS.NPC_ODDGIRL);
+                else pendingInteraction = () => startDialogue(SCRIPTS.NPC_GENERIC);
+
+                interactionFound = true;
+                break;
+             }
+        }
+    }
+
+    if (!interactionFound) {
+        uiPrompt.style.display = 'none';
+        pendingInteraction = null;
+    }
 }
 
 function draw() {
@@ -637,6 +802,11 @@ const uiText = document.getElementById('dialogue-text');
 const uiChoices = document.getElementById('choices');
 const uiPrompt = document.getElementById('interaction-prompt');
 
+let currentDialogueLine = null;
+let typeInterval = null;
+let currentFullText = "";
+let isTyping = false;
+
 function startDialogue(dialogueArray) {
     gameState = 'dialogue';
     dialogueQueue = [...dialogueArray];
@@ -650,7 +820,8 @@ function showNextLine() {
         return;
     }
 
-    const line = dialogueQueue.shift();
+    currentDialogueLine = dialogueQueue.shift();
+    const line = currentDialogueLine;
     uiChoices.innerHTML = ''; 
 
     // Colors
@@ -662,8 +833,33 @@ function showNextLine() {
     
     uiName.style.color = color;
     uiName.innerText = line.speaker;
-    uiText.innerText = line.text;
 
+    // Start Typewriter
+    uiText.innerText = "";
+    currentFullText = line.text;
+    isTyping = true;
+    let charIndex = 0;
+
+    if (typeInterval) clearInterval(typeInterval);
+
+    uiPrompt.style.display = 'none'; // Hide prompt while typing
+    interactionActive = false;
+
+    typeInterval = setInterval(() => {
+        uiText.innerText += currentFullText[charIndex];
+        charIndex++;
+        if (charIndex >= currentFullText.length) {
+             finishTyping();
+        }
+    }, 20); // Typing speed
+}
+
+function finishTyping() {
+    clearInterval(typeInterval);
+    isTyping = false;
+    uiText.innerText = currentFullText;
+
+    const line = currentDialogueLine;
     if (line.choices) {
         // Render Choices
         line.choices.forEach(choice => {
@@ -676,8 +872,7 @@ function showNextLine() {
             };
             uiChoices.appendChild(btn);
         });
-        interactionActive = false; // Disable spacebar when choices are present
-        uiPrompt.style.display = 'none';
+        interactionActive = false;
     } else {
         interactionActive = true;
         uiPrompt.style.display = 'block';
@@ -704,10 +899,17 @@ function handleChoice(outcome) {
 }
 
 function handleInteraction() {
-    if (gameState === 'dialogue' && interactionActive) {
-        interactionActive = false;
-        uiPrompt.style.display = 'none';
-        showNextLine();
+    if (gameState === 'dialogue') {
+        if (isTyping) {
+            finishTyping();
+        } else if (interactionActive) {
+            interactionActive = false;
+            uiPrompt.style.display = 'none';
+            showNextLine();
+        }
+    } else if (gameState === 'playing' && pendingInteraction) {
+        pendingInteraction();
+        pendingInteraction = null;
     }
 }
 
@@ -716,20 +918,68 @@ function endDialogue() {
     uiDialogue.style.display = 'none';
 }
 
-// --- INIT ---
-setTimeout(() => document.getElementById('fade-overlay').style.opacity = 0, 500);
+// --- START SCREEN ---
+const startScreen = document.createElement('div');
+startScreen.id = 'start-screen';
+startScreen.style.position = 'absolute';
+startScreen.style.top = '0';
+startScreen.style.left = '0';
+startScreen.style.width = '100%';
+startScreen.style.height = '100%';
+startScreen.style.backgroundColor = '#000';
+startScreen.style.display = 'flex';
+startScreen.style.flexDirection = 'column';
+startScreen.style.justifyContent = 'center';
+startScreen.style.alignItems = 'center';
+startScreen.style.zIndex = '1000';
 
-// Initialize Game State
-player.x = 200;
-startDialogue(SCRIPTS.HOME_ARGUMENT);
+const title = document.createElement('h1');
+title.innerText = 'NPC ENERGY';
+title.style.color = '#f0e68c';
+title.style.fontSize = '40px';
+title.style.marginBottom = '20px';
+
+const subtitle = document.createElement('p');
+subtitle.innerText = 'Chapter 1: The Hallway';
+subtitle.style.color = '#fff';
+subtitle.style.fontSize = '16px';
+subtitle.style.marginBottom = '40px';
+
+const startBtn = document.createElement('button');
+startBtn.innerText = 'PRESS START';
+startBtn.style.padding = '15px 30px';
+startBtn.style.fontSize = '16px';
+startBtn.style.fontFamily = "'Press Start 2P', monospace";
+startBtn.style.cursor = 'pointer';
+startBtn.style.background = '#3498db';
+startBtn.style.border = 'none';
+startBtn.style.color = 'white';
+
+startBtn.onclick = startGame;
+
+startScreen.appendChild(title);
+startScreen.appendChild(subtitle);
+startScreen.appendChild(startBtn);
+document.getElementById('game-container').appendChild(startScreen);
+
+
+// --- INIT ---
+function startGame() {
+    startScreen.style.display = 'none';
+    setTimeout(() => document.getElementById('fade-overlay').style.opacity = 0, 500);
+
+    // Initialize Game State
+    player.x = 200;
+    startDialogue(SCRIPTS.HOME_ARGUMENT);
+
+    gameLoop();
+}
 
 function gameLoop() {
     update();
     draw();
     requestAnimationFrame(gameLoop);
 }
-
-gameLoop();
 
 </script>
 </body>
