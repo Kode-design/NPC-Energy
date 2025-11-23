@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NPC Energy: Chapter 1</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            font-family: 'Press Start 2P', monospace;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            border: 4px solid #333;
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated; 
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        #dialogue-box {
+            background: #000;
+            border-top: 4px solid white;
+            padding: 20px;
+            min-height: 160px;
+            display: none; 
+            pointer-events: auto;
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .char-name {
+            color: #f0e68c;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .dialogue-text {
+            color: white;
+            font-size: 12px;
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .choices-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
+        .choice-btn {
+            background: #222;
+            border: 2px solid #555;
+            color: white;
+            padding: 8px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .choice-btn:hover {
+            background: #444;
+            border-color: #f0e68c;
+            padding-left: 15px;
+        }
+
+        #interaction-prompt {
+            position: absolute;
+            bottom: 180px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border: 2px solid white;
+            display: none;
+            font-size: 10px;
+            animation: bounce 1s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translate(-50%, 0); }
+            50% { transform: translate(-50%, -5px); }
+        }
+        
+        #fade-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            opacity: 1;
+            transition: opacity 1s;
+            pointer-events: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+        <div id="fade-overlay"></div>
+        
+        <div id="ui-layer">
+            <div id="interaction-prompt">PRESS SPACE</div>
+
+            <div id="dialogue-box">
+                <div id="char-name" class="char-name">Timothy</div>
+                <div id="dialogue-text" class="dialogue-text">...</div>
+                <div id="choices" class="choices-container"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+/**
+ * NPC ENERGY - GAME ENGINE
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false; 
+
+// --- SCENE MANAGEMENT ---
+const SCENES = {
+    HOME: 0,
+    OUTSIDE: 1,
+    HALLWAY: 2
+};
+
+let currentScene = SCENES.HOME;
+let gameState = 'dialogue'; // Starts in dialogue
+let frameCount = 0;
+
+// --- INPUT ---
+const keys = {
+    ArrowRight: false,
+    ArrowLeft: false,
+    KeyD: false,
+    KeyA: false,
+    Space: false
+};
+
+window.addEventListener('keydown', (e) => {
+    if(e.code === 'Space') handleInteraction();
+    if(keys.hasOwnProperty(e.code)) keys[e.code] = true;
+});
+
+window.addEventListener('keyup', (e) => {
+    if(keys.hasOwnProperty(e.code)) keys[e.code] = false;
+});
+
+// --- CAMERA ---
+const camera = { x: 0, y: 0 };
+
+// --- SPRITE HELPERS ---
+function drawPixelRect(ctx, x, y, width, height, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.floor(x), Math.floor(y), width, height);
+}
+
+class Entity {
+    constructor(x, y, width, height, color) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.color = color;
+        this.direction = 1; 
+        this.isMoving = false;
+        this.bobOffset = 0;
+        this.visible = true;
+    }
+
+    draw(ctx, camX) {
+        if (!this.visible) return;
+        
+        if (this.isMoving) {
+            this.bobOffset = Math.sin(frameCount * 0.2) * 2;
+        } else {
+            this.bobOffset = 0;
+        }
+
+        const renderX = this.x - camX;
+        const renderY = this.y + this.bobOffset;
+
+        if (renderX < -100 || renderX > 900) return;
+
+        this.drawSprite(ctx, renderX, renderY);
+    }
+
+    drawSprite(ctx, x, y) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(x, y, this.width, this.height);
+    }
+}
+
+// --- CHARACTERS ---
+
+class Timothy extends Entity {
+    constructor(x, y) {
+        super(x, y, 30, 58, '#3498db'); 
+        this.speed = 3;
+    }
+
+    update() {
+        if (gameState !== 'playing') {
+            this.isMoving = false;
+            return;
+        }
+
+        this.isMoving = false;
+        if (keys.ArrowRight || keys.KeyD) {
+            this.x += this.speed;
+            this.direction = 1;
+            this.isMoving = true;
+        }
+        if (keys.ArrowLeft || keys.KeyA) {
+            this.x -= this.speed;
+            this.direction = -1;
+            this.isMoving = true;
+        }
+        
+        // Scene Bounds
+        if (this.x < 0) this.x = 0;
+        if (currentScene === SCENES.HOME && this.x > 700) this.x = 700;
+        if (currentScene === SCENES.HALLWAY && this.x > 3000) this.x = 3000;
+    }
+
+    drawSprite(ctx, x, y) {
+        drawPixelRect(ctx, x + 5, y + 20, 20, 25, '#3498db'); 
+        drawPixelRect(ctx, x + 5, y + 45, 20, 13, '#2c3e50'); 
+        drawPixelRect(ctx, x + 2, y, 26, 20, '#f1c27d'); 
+        drawPixelRect(ctx, x, y - 5, 30, 10, '#5d4037'); 
+        ctx.fillStyle = '#000';
+        if (this.direction === 1) ctx.fillRect(x + 15, y + 8, 8, 4);
+        else ctx.fillRect(x + 5, y + 8, 8, 4);
+        const bpX = (this.direction === 1) ? x - 4 : x + 24;
+        drawPixelRect(ctx, bpX, y + 22, 10, 15, '#e67e22');
+    }
+}
+
+class Khristopher extends Entity {
+    constructor(x, y) {
+        super(x, y, 48, 85, '#111'); 
+    }
+
+    update(targetX) {
+        if (currentScene === SCENES.HOME) return; // Not in home scene
+
+        const distance = targetX - this.x;
+        const stopDistance = 70; 
+
+        if (Math.abs(distance) > stopDistance) {
+            this.x += Math.sign(distance) * 2.8; 
+            this.direction = Math.sign(distance);
+            this.isMoving = true;
+        } else {
+            this.isMoving = false;
+        }
+    }
+
+    drawSprite(ctx, x, y) {
+        drawPixelRect(ctx, x, y + 20, 48, 50, '#1a1a1a');
+        drawPixelRect(ctx, x + 8, y + 68, 32, 17, '#0d0d0d');
+        drawPixelRect(ctx, x + 4, y - 2, 40, 35, '#111');
+        drawPixelRect(ctx, x + 10, y + 8, 28, 22, '#000'); 
+        drawPixelRect(ctx, x + 16, y + 22, 16, 8, '#dcb'); 
+        if (this.direction === 1) drawPixelRect(ctx, x + 18, y + 10, 2, 10, '#a33'); 
+        else drawPixelRect(ctx, x + 28, y + 10, 2, 10, '#a33'); 
+        drawPixelRect(ctx, x + 12, y + 55, 24, 3, '#333');
+    }
+}
+
+class Tuesday extends Entity {
+    constructor(x, y) {
+        super(x, y, 28, 48, '#000'); 
+    }
+    update(targetX) {
+        if (currentScene === SCENES.HOME) return;
+        const distance = targetX - this.x;
+        const stopDistance = 50; 
+        if (Math.abs(distance) > stopDistance) {
+            this.x += Math.sign(distance) * 2.6; 
+            this.direction = Math.sign(distance);
+            this.isMoving = true;
+        } else {
+            this.isMoving = false;
+        }
+    }
+    drawSprite(ctx, x, y) {
+        drawPixelRect(ctx, x + 2, y + 18, 24, 22, '#222'); 
+        drawPixelRect(ctx, x + 8, y + 25, 12, 6, '#fff'); 
+        drawPixelRect(ctx, x + 10, y + 27, 8, 2, '#888');
+        drawPixelRect(ctx, x + 4, y + 40, 20, 8, '#111');
+        drawPixelRect(ctx, x + 6, y + 48, 6, 8, '#000'); 
+        drawPixelRect(ctx, x + 16, y + 48, 6, 8, '#000'); 
+        drawPixelRect(ctx, x + 4, y + 54, 10, 6, '#111'); 
+        drawPixelRect(ctx, x + 14, y + 54, 10, 6, '#111');
+        drawPixelRect(ctx, x + 4, y, 20, 18, '#fffafa');
+        drawPixelRect(ctx, x, y - 4, 28, 10, '#000'); 
+        drawPixelRect(ctx, x - 2, y + 4, 8, 22, '#000'); 
+        drawPixelRect(ctx, x + 22, y + 4, 8, 22, '#000'); 
+        drawPixelRect(ctx, x + 4, y, 6, 15, '#fff'); 
+        drawPixelRect(ctx, x + 20, y + 5, 4, 15, '#fff');
+        drawPixelRect(ctx, x + 9, y + 16, 10, 2, '#000');
+    }
+}
+
+class Mom extends Entity {
+    constructor(x, y) {
+        super(x, y, 32, 56, '#8e44ad');
+    }
+    drawSprite(ctx, x, y) {
+        // Mom: Tired, messy bun, house clothes
+        drawPixelRect(ctx, x + 4, y + 20, 24, 20, '#9b59b6'); 
+        drawPixelRect(ctx, x + 4, y + 40, 24, 16, '#2c3e50'); 
+        drawPixelRect(ctx, x + 6, y, 20, 20, '#e6b0aa'); 
+        drawPixelRect(ctx, x + 4, y - 6, 24, 10, '#5d4037'); 
+        drawPixelRect(ctx, x + 8, y + 8, 16, 2, '#333'); 
+    }
+}
+
+class Car extends Entity {
+    constructor(x, y) {
+        super(x, y, 120, 60, '#7f8c8d');
+    }
+    drawSprite(ctx, x, y) {
+        // Beat up sedan
+        drawPixelRect(ctx, x, y + 20, 120, 30, '#95a5a6'); 
+        drawPixelRect(ctx, x + 20, y, 80, 20, '#bdc3c7'); 
+        drawPixelRect(ctx, x + 25, y + 2, 30, 16, '#ecf0f1'); 
+        drawPixelRect(ctx, x + 65, y + 2, 30, 16, '#ecf0f1'); 
+        drawPixelRect(ctx, x + 15, y + 40, 20, 20, '#222');
+        drawPixelRect(ctx, x + 85, y + 40, 20, 20, '#222');
+        drawPixelRect(ctx, x + 10, y + 35, 10, 5, '#a33');
+    }
+}
+
+// Reuse existing classes for hall
+class OddGirl extends Entity { constructor(x,y) { super(x,y,26,44,'#bdc3c7'); this.patrolStart=x-100; this.patrolEnd=x+100; this.speed=1.0;} update() { this.x+=this.speed*this.direction; this.isMoving=true; if(this.x>this.patrolEnd)this.direction=-1; if(this.x<this.patrolStart)this.direction=1; } drawSprite(ctx,x,y) { drawPixelRect(ctx,x+2,y+16,22,18,'#95a5a6'); drawPixelRect(ctx,x+4,y+34,18,6,'#34495e'); drawPixelRect(ctx,x+6,y+40,4,4,'#f1c27d'); drawPixelRect(ctx,x+16,y+40,4,4,'#f1c27d'); drawPixelRect(ctx,x+3,y,20,18,'#f1c27d'); drawPixelRect(ctx,x+1,y-2,24,8,'#6d4c41'); drawPixelRect(ctx,x,y+4,4,10,'#6d4c41'); drawPixelRect(ctx,x+22,y+4,4,10,'#6d4c41'); drawPixelRect(ctx,x-2,y+4,5,10,'#ecf0f1'); drawPixelRect(ctx,x+23,y+4,5,10,'#ecf0f1'); drawPixelRect(ctx,x+2,y-3,22,2,'#bdc3c7'); }}
+class Freddy extends Entity { constructor(x,y) { super(x,y,50,70,'#c0392b'); } drawSprite(ctx,x,y) { drawPixelRect(ctx,x,y+15,50,40,'#c0392b'); drawPixelRect(ctx,x-5,y+15,10,30,'#fff'); drawPixelRect(ctx,x+45,y+15,10,30,'#fff'); drawPixelRect(ctx,x+10,y+55,30,15,'#bdc3c7'); drawPixelRect(ctx,x+15,y,20,20,'#f1c27d'); drawPixelRect(ctx,x+15,y-4,20,8,'#f1c40f'); }}
+class Daniel extends Entity { constructor(x,y) { super(x,y,35,60,'#f1c40f'); this.startPos=x; } update() { if(this.x>-100){this.x-=2; this.isMoving=true; this.direction=-1;}else{this.visible=false;}} drawSprite(ctx,x,y) { drawPixelRect(ctx,x,y+15,35,30,'#f1c40f'); drawPixelRect(ctx,x+10,y+45,15,15,'#fff'); drawPixelRect(ctx,x+5,y,25,20,'#f1c27d'); drawPixelRect(ctx,x+2,y-4,30,8,'#d4ac0d'); if(this.direction===-1)drawPixelRect(ctx,x+4,y+6,10,4,'#000'); }}
+class Mindy extends Entity { constructor(x,y) { super(x,y,30,55,'#e74c3c'); } update() { if(this.x>-100){this.x-=2; this.isMoving=true; this.direction=-1;}else{this.visible=false;}} drawSprite(ctx,x,y) { drawPixelRect(ctx,x+5,y+15,20,20,'#fff'); drawPixelRect(ctx,x+8,y+18,14,2,'#e74c3c'); drawPixelRect(ctx,x+2,y+35,26,10,'#e74c3c'); drawPixelRect(ctx,x+5,y+45,6,10,'#dcb'); drawPixelRect(ctx,x+19,y+45,6,10,'#dcb'); drawPixelRect(ctx,x+5,y,20,18,'#f1c27d'); drawPixelRect(ctx,x+2,y-2,26,25,'#d35400'); drawPixelRect(ctx,x+20,y-5,8,8,'#fff'); }}
+class Weeb extends Entity { constructor(x,y) { super(x,y,30,55,'#8e44ad'); this.patrolStart=x-300; this.patrolEnd=x+300; this.speed=6; } update() { this.x+=this.speed*this.direction; this.isMoving=true; if(this.x>this.patrolEnd)this.direction=-1; if(this.x<this.patrolStart)this.direction=1; } drawSprite(ctx,x,y) { const lean=10*this.direction; drawPixelRect(ctx,x+lean,y+25,25,20,'#2c3e50'); drawPixelRect(ctx,x+lean+8,y+30,8,5,'#c0392b'); drawPixelRect(ctx,x+2+lean,y+5,24,20,'#f1c27d'); drawPixelRect(ctx,x+lean,y+2,28,6,'#95a5a6'); drawPixelRect(ctx,x+lean-2,y+4,32,2,'#2c3e50'); if(this.direction===1){drawPixelRect(ctx,x-10+lean,y+25,15,6,'#f1c27d');}else{drawPixelRect(ctx,x+20+lean,y+25,15,6,'#f1c27d');} drawPixelRect(ctx,x+5,y+45,8,10,'#111'); drawPixelRect(ctx,x+15,y+45,8,10,'#111'); }}
+class GenericStudent extends Entity { constructor(x,y) { const height=50+Math.random()*15; const color=`hsl(${Math.random()*360},40%,40%)`; super(x,y,30,height,color); this.speed=1+Math.random(); this.patrolRange=300; this.startX=x; } update() { this.x+=this.speed*this.direction; this.isMoving=true; if(this.x>this.startX+this.patrolRange)this.direction=-1; if(this.x<this.startX-this.patrolRange)this.direction=1; } drawSprite(ctx,x,y) { drawPixelRect(ctx,x+5,y+20,20,this.height-30,this.color); drawPixelRect(ctx,x+5,y+(this.height-10),20,10,'#2c3e50'); drawPixelRect(ctx,x+2,y,26,20,'#f1c27d'); drawPixelRect(ctx,x,y-4,30,8,'#3e2723'); }}
+
+// --- SCENE ASSETS ---
+function drawHomeBackground(ctx) {
+    ctx.fillStyle = '#d7bde2'; 
+    ctx.fillRect(0, 0, 800, 350);
+    ctx.fillStyle = '#a1887f'; 
+    ctx.fillRect(0, 350, 800, 100);
+    ctx.fillStyle = '#85c1e9';
+    ctx.fillRect(100, 100, 150, 150);
+    ctx.fillStyle = '#fff'; 
+    ctx.fillRect(170, 100, 10, 150);
+    ctx.fillRect(100, 170, 150, 10);
+    ctx.fillStyle = '#5dade2';
+    drawPixelRect(ctx, 400, 280, 200, 70, '#5dade2');
+}
+
+function drawOutsideBackground(ctx) {
+    ctx.fillStyle = '#85c1e9';
+    ctx.fillRect(0,0,800,500);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(100, 50, 80, 30);
+    ctx.fillRect(500, 80, 120, 40);
+    ctx.fillStyle = '#95a5a6';
+    ctx.fillRect(0, 350, 800, 100);
+    ctx.fillStyle = '#c0392b'; 
+    ctx.fillRect(500, 150, 300, 200);
+    ctx.fillStyle = '#2c3e50'; 
+    ctx.fillRect(600, 250, 60, 100);
+}
+
+function drawHallwayBackground(ctx, camX) {
+    ctx.fillStyle = '#7f8c8d';
+    ctx.fillRect(0, 350, 800, 100);
+    ctx.fillStyle = '#95a5a6';
+    for (let i = 0; i < 800; i+= 40) {
+        let worldX = i + (Math.floor(camX / 40) * 40) - (camX % 40);
+        ctx.fillRect(worldX, 350, 20, 100);
+    }
+    const lockerWidth = 60;
+    const startLocker = Math.floor(camX / lockerWidth);
+    const endLocker = startLocker + 15;
+    for (let i = startLocker; i < endLocker; i++) {
+        let lx = (i * lockerWidth) - camX;
+        ctx.fillStyle = '#34495e';
+        ctx.fillRect(lx + 5, 100, 50, 250);
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(lx + 15, 120, 30, 5);
+        ctx.fillRect(lx + 15, 130, 30, 5);
+        ctx.fillRect(lx + 15, 140, 30, 5);
+        ctx.fillStyle = '#95a5a6';
+        ctx.fillRect(lx + 45, 220, 5, 10);
+    }
+}
+
+// --- DIALOGUE DATA ---
+const SCRIPTS = {
+    HOME_ARGUMENT: [
+        { speaker: 'Timothy', text: "Mom, look at this shirt. It's from the clearance rack. It screams 'NPC'." },
+        { speaker: 'Mom', text: "It screams 'We have a budget', Timothy. You know things are tight." },
+        { 
+            speaker: 'Timothy', 
+            text: "(Internal) How do I play this? I need to set the tone for the season.",
+            choices: [
+                { text: "[Bitter] 'It's humiliating. I look like a background texture.'", outcome: 'bitter' },
+                { text: "[Resigned] 'Fine. Whatever. It covers my body.'", outcome: 'resigned' },
+                { text: "[Ironic] 'Actually, maybe it's retro chic? Normcore?'", outcome: 'ironic' }
+            ]
+        }
+    ],
+    HOME_BITTER: [
+        { speaker: 'Mom', text: "Don't be like that. Your father's check hasn't cleared yet. We do what we can." },
+        { speaker: 'Timothy', text: "Yeah, yeah. I know." },
+        { speaker: 'Mom', text: "Just... try to have a good day. Khristopher is waiting." }
+    ],
+    HOME_RESIGNED: [
+        { speaker: 'Mom', text: "Exactly. It's clean and it fits. That's all that matters." },
+        { speaker: 'Timothy', text: "I guess character customization is locked for now." },
+        { speaker: 'Mom', text: "Stop with the gaming talk. Khristopher is waiting." }
+    ],
+    HOME_IRONIC: [
+        { speaker: 'Mom', text: "*Smiles* That's the spirit! You could make a burlap sack look... interesting." },
+        { speaker: 'Timothy', text: "Let's not push it. But I'll wear it." },
+        { speaker: 'Mom', text: "Khristopher is waiting outside. Go get 'em, tiger." }
+    ],
+
+    OUTSIDE_MEET: [
+        { speaker: 'Mom', text: "Here we are. Have a good day, boys. Make good choices!" },
+        { speaker: 'Khristopher', text: "Thanks for the ride, Mrs. B." },
+        { speaker: 'Timothy', text: "Great. Dropped off in the Loser Cruiser." },
+        { speaker: 'Khristopher', text: "Could be worse. You could be wearing... actually, no, that shirt is pretty bad." },
+        { 
+            speaker: 'Timothy', 
+            text: "Do you have to point it out?",
+            choices: [
+                { text: "'Don't look at it. It burns the retina.'", outcome: 'humor' },
+                { text: "'It's called fashion, Khristopher. Look it up.'", outcome: 'defense' }
+            ]
+        }
+    ],
+    OUTSIDE_HUMOR: [
+        { speaker: 'Khristopher', text: "It really does. It's like staring into a beige abyss." },
+        { speaker: 'Tuesday', text: "I like the abyss." },
+        { speaker: 'Timothy', text: "Gah! Tuesday? How long have you been there?" },
+        { speaker: 'Tuesday', text: "Since the stop sign." }
+    ],
+    OUTSIDE_DEFENSE: [
+        { speaker: 'Khristopher', text: "If fashion means 'blending into the drywall', then yes, you are very fashionable." },
+        { speaker: 'Tuesday', text: "Blending in is a survival tactic." },
+        { speaker: 'Timothy', text: "Whoa! Tuesday! Personal space!" },
+        { speaker: 'Tuesday', text: "Space is an illusion." }
+    ],
+
+    HALLWAY_INTRO: [
+        { speaker: 'Timothy', text: "Here we go. The Hallway of Judgment." },
+        { speaker: 'Khristopher', text: "Just keep moving. Don't make eye contact." },
+        { 
+            speaker: 'Timothy', 
+            text: "How do we enter? The opening shot establishes everything.",
+            choices: [
+                { text: "[Stealth] Head down, hood up (if I had one).", outcome: 'stealth' },
+                { text: "[Strut] Shoulders back. Fake it 'til you make it.", outcome: 'strut' }
+            ]
+        }
+    ],
+    HALLWAY_STEALTH: [
+        { speaker: 'Timothy', text: "Stealth mode engaged. I am a shadow." },
+        { speaker: 'Khristopher', text: "You're walking weird. You look constipated." },
+        { speaker: 'Timothy', text: "It's tactical crouching, Khris." }
+    ],
+    HALLWAY_STRUT: [
+        { speaker: 'Timothy', text: "Watch this. Main Character energy loading..." },
+        { speaker: 'Khristopher', text: "Oh no. Please don't trip." },
+        { speaker: 'Timothy', text: "I never tri-- *stumbles slightly* I meant to do that." }
+    ]
+};
+
+// --- GAME OBJECTS ---
+const player = new Timothy(150, 300);
+const mom = new Mom(300, 300);
+const car = new Car(400, 290);
+const follower = new Khristopher(100, 300);
+const weirdGirl = new Tuesday(50, 300);
+
+// Hallway Objects
+const freddy = new Freddy(1800, 280); 
+const daniel = new Daniel(700, 290);
+const mindy = new Mindy(750, 295);
+const roamingNPCs = [
+    new Weeb(400, 300),
+    new OddGirl(1000, 305),
+    new GenericStudent(500, 300),
+    new GenericStudent(1100, 300),
+    new GenericStudent(1500, 300)
+];
+
+// --- LOGIC ---
+let dialogueQueue = [];
+let interactionActive = false;
+let sceneTriggered = false;
+
+// NOTE: Initial start call moved to end of script to wait for UI init
+
+function changeScene(newScene) {
+    if (sceneTriggered) return;
+    sceneTriggered = true;
+
+    const overlay = document.getElementById('fade-overlay');
+    overlay.style.opacity = 1;
+    
+    setTimeout(() => {
+        currentScene = newScene;
+        
+        // Reset Positions based on scene
+        if (newScene === SCENES.OUTSIDE) {
+            player.x = 250;
+            follower.x = 350; 
+            weirdGirl.x = 100; 
+            startDialogue(SCRIPTS.OUTSIDE_MEET);
+        } else if (newScene === SCENES.HALLWAY) {
+            player.x = 50;
+            follower.x = 10;
+            weirdGirl.x = -50;
+            startDialogue(SCRIPTS.HALLWAY_INTRO);
+        }
+        
+        setTimeout(() => {
+            overlay.style.opacity = 0;
+            sceneTriggered = false; 
+        }, 100);
+    }, 1000);
+}
+
+function update() {
+    frameCount++;
+    player.update();
+
+    if (currentScene === SCENES.HOME) {
+        if (dialogueQueue.length === 0 && !interactionActive && keys.ArrowRight && player.x > 600) {
+             changeScene(SCENES.OUTSIDE);
+        }
+    } 
+    else if (currentScene === SCENES.OUTSIDE) {
+        follower.update(player.x);
+        weirdGirl.update(follower.x);
+        
+        if (dialogueQueue.length === 0 && !interactionActive && player.x > 750) {
+            changeScene(SCENES.HALLWAY);
+        }
+    }
+    else if (currentScene === SCENES.HALLWAY) {
+        follower.update(player.x);
+        weirdGirl.update(follower.x);
+        daniel.update();
+        mindy.update();
+        roamingNPCs.forEach(npc => npc.update());
+        
+        camera.x = player.x - 200;
+        if (camera.x < 0) camera.x = 0;
+    }
+
+    updateUI();
+}
+
+function updateUI() {
+    // UI logic 
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (currentScene === SCENES.HOME) {
+        drawHomeBackground(ctx);
+        mom.draw(ctx, 0);
+        player.draw(ctx, 0);
+    } 
+    else if (currentScene === SCENES.OUTSIDE) {
+        drawOutsideBackground(ctx);
+        car.draw(ctx, 0);
+        player.draw(ctx, 0);
+        follower.draw(ctx, 0);
+        weirdGirl.draw(ctx, 0);
+    }
+    else if (currentScene === SCENES.HALLWAY) {
+        drawHallwayBackground(ctx, camera.x);
+        roamingNPCs.forEach(npc => npc.draw(ctx, camera.x));
+        daniel.draw(ctx, camera.x);
+        mindy.draw(ctx, camera.x);
+        weirdGirl.draw(ctx, camera.x);
+        follower.draw(ctx, camera.x);
+        player.draw(ctx, camera.x);
+        freddy.draw(ctx, camera.x);
+    }
+}
+
+// --- DIALOGUE SYSTEM ---
+const uiDialogue = document.getElementById('dialogue-box');
+const uiName = document.getElementById('char-name');
+const uiText = document.getElementById('dialogue-text');
+const uiChoices = document.getElementById('choices');
+const uiPrompt = document.getElementById('interaction-prompt');
+
+function startDialogue(dialogueArray) {
+    gameState = 'dialogue';
+    dialogueQueue = [...dialogueArray];
+    uiDialogue.style.display = 'block';
+    showNextLine();
+}
+
+function showNextLine() {
+    if (dialogueQueue.length === 0) {
+        endDialogue();
+        return;
+    }
+
+    const line = dialogueQueue.shift();
+    uiChoices.innerHTML = ''; 
+
+    // Colors
+    let color = '#fff';
+    if(line.speaker === 'Timothy') color = '#3498db';
+    if(line.speaker === 'Mom') color = '#8e44ad';
+    if(line.speaker === 'Khristopher') color = '#95a5a6';
+    if(line.speaker === 'Tuesday') color = '#bdc3c7';
+    
+    uiName.style.color = color;
+    uiName.innerText = line.speaker;
+    uiText.innerText = line.text;
+
+    if (line.choices) {
+        // Render Choices
+        line.choices.forEach(choice => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.innerText = choice.text;
+            btn.onclick = (e) => {
+                e.stopPropagation(); // Prevent spacebar interaction
+                handleChoice(choice.outcome);
+            };
+            uiChoices.appendChild(btn);
+        });
+        interactionActive = false; // Disable spacebar when choices are present
+        uiPrompt.style.display = 'none';
+    } else {
+        interactionActive = true;
+        uiPrompt.style.display = 'block';
+    }
+}
+
+function handleChoice(outcome) {
+    // Append the outcome script to the front of the queue
+    let nextLines = [];
+    
+    if (outcome === 'bitter') nextLines = SCRIPTS.HOME_BITTER;
+    if (outcome === 'resigned') nextLines = SCRIPTS.HOME_RESIGNED;
+    if (outcome === 'ironic') nextLines = SCRIPTS.HOME_IRONIC;
+    
+    if (outcome === 'humor') nextLines = SCRIPTS.OUTSIDE_HUMOR;
+    if (outcome === 'defense') nextLines = SCRIPTS.OUTSIDE_DEFENSE;
+    
+    if (outcome === 'stealth') nextLines = SCRIPTS.HALLWAY_STEALTH;
+    if (outcome === 'strut') nextLines = SCRIPTS.HALLWAY_STRUT;
+    
+    // Add to queue
+    dialogueQueue = [...nextLines, ...dialogueQueue];
+    showNextLine();
+}
+
+function handleInteraction() {
+    if (gameState === 'dialogue' && interactionActive) {
+        interactionActive = false;
+        uiPrompt.style.display = 'none';
+        showNextLine();
+    }
+}
+
+function endDialogue() {
+    gameState = 'playing';
+    uiDialogue.style.display = 'none';
+}
+
+// --- INIT ---
+setTimeout(() => document.getElementById('fade-overlay').style.opacity = 0, 500);
+
+// Initialize Game State
+player.x = 200;
+startDialogue(SCRIPTS.HOME_ARGUMENT);
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+
+</script>
+</body>
+</html>
