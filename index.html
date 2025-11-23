@@ -139,6 +139,9 @@
         <div id="fade-overlay"></div>
         
         <div id="ui-layer">
+            <div id="energy-meter" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 5px; border: 2px solid #555; font-size: 10px; color: #fff;">
+                NPC ENERGY: <span id="energy-val">50</span>%
+            </div>
             <div id="interaction-prompt">PRESS SPACE</div>
 
             <div id="dialogue-box">
@@ -162,12 +165,41 @@ ctx.imageSmoothingEnabled = false;
 const SCENES = {
     HOME: 0,
     OUTSIDE: 1,
-    HALLWAY: 2
+    HALLWAY: 2,
+    CLASSROOM: 3,
+    CAFETERIA: 4
 };
 
 let currentScene = SCENES.HOME;
 let gameState = 'dialogue'; // Starts in dialogue
 let frameCount = 0;
+
+// --- GAME STATE & SYSTEMS ---
+const GameState = {
+    inventory: [],
+    quests: {
+        findBackpack: false,
+        getSchedule: false,
+        surviveClass: false,
+        findLunchSeat: false
+    },
+    flags: {
+        hasTalkedToMom: false,
+        hasCheckedMirror: false,
+        hasCheckedBed: false,
+        foundBackpack: false
+    },
+    npcEnergy: 50 // 0 = Invisible, 100 = Main Character
+};
+
+function updateEnergy(amount) {
+    GameState.npcEnergy += amount;
+    if (GameState.npcEnergy > 100) GameState.npcEnergy = 100;
+    if (GameState.npcEnergy < 0) GameState.npcEnergy = 0;
+
+    const uiEnergy = document.getElementById('energy-val');
+    if(uiEnergy) uiEnergy.innerText = GameState.npcEnergy;
+}
 
 // --- INPUT ---
 const keys = {
@@ -262,9 +294,14 @@ class Timothy extends Entity {
         }
         
         // Scene Bounds
+        let maxW = 800;
+        if (currentScene === SCENES.HOME) maxW = 700;
+        if (currentScene === SCENES.HALLWAY) maxW = 3000;
+        if (currentScene === SCENES.CLASSROOM) maxW = 800;
+        if (currentScene === SCENES.CAFETERIA) maxW = 1200;
+
         if (this.x < 0) this.x = 0;
-        if (currentScene === SCENES.HOME && this.x > 700) this.x = 700;
-        if (currentScene === SCENES.HALLWAY && this.x > 3000) this.x = 3000;
+        if (this.x > maxW) this.x = maxW;
     }
 
     drawSprite(ctx, x, y) {
@@ -543,17 +580,36 @@ const SCRIPTS = {
     HOME_BITTER: [
         { speaker: 'Mom', text: "Don't be like that. Your father's check hasn't cleared yet. We do what we can." },
         { speaker: 'Timothy', text: "Yeah, yeah. I know." },
-        { speaker: 'Mom', text: "Just... try to have a good day. Khristopher is waiting." }
+        { speaker: 'Mom', text: "Just... get your backpack and go. Khristopher is waiting." }
     ],
     HOME_RESIGNED: [
         { speaker: 'Mom', text: "Exactly. It's clean and it fits. That's all that matters." },
         { speaker: 'Timothy', text: "I guess character customization is locked for now." },
-        { speaker: 'Mom', text: "Stop with the gaming talk. Khristopher is waiting." }
+        { speaker: 'Mom', text: "Stop with the gaming talk. Grab your backpack. Khristopher is waiting." }
     ],
     HOME_IRONIC: [
         { speaker: 'Mom', text: "*Smiles* That's the spirit! You could make a burlap sack look... interesting." },
         { speaker: 'Timothy', text: "Let's not push it. But I'll wear it." },
-        { speaker: 'Mom', text: "Khristopher is waiting outside. Go get 'em, tiger." }
+        { speaker: 'Mom', text: "Now find your backpack and get out there. Khristopher is waiting." }
+    ],
+
+    // HOME INTERACTIONS
+    HOME_MIRROR: [
+        { speaker: 'Timothy', text: "A generic face staring back. 5/10 on a good day." },
+        { speaker: 'Timothy', text: "Maybe if I squint I look like a side character with a backstory." }
+    ],
+    HOME_BED: [
+        { speaker: 'Timothy', text: "I should make this. But NPCs don't have to worry about room cleanliness stats." }
+    ],
+    HOME_DRESSER: [
+        { speaker: 'Timothy', text: "Empty. Just beige shirts and grey pants." }
+    ],
+    HOME_BACKPACK: [
+        { speaker: 'Timothy', text: "Found it. Heavy with the weight of expectation. And textbooks." },
+        { speaker: 'System', text: "Backpack Acquired." }
+    ],
+    HOME_LEAVE_BLOCK: [
+        { speaker: 'Timothy', text: "I can't leave yet. Mom would kill me if I forgot my backpack." }
     ],
 
     OUTSIDE_MEET: [
@@ -625,6 +681,68 @@ const SCRIPTS = {
         { speaker: 'Freddy', text: "Keep walking. The air around you is depressing." }
     ],
 
+    // CLASSROOM SCRIPTS
+    CLASSROOM_INTRO: [
+        { speaker: 'Teacher', text: "Settle down, everyone. Mr. P here. Let's talk about the Ottoman Empire." },
+        { speaker: 'Timothy', text: "(Thinking) Just find a seat. Don't trip. Don't sneeze." },
+        {
+            speaker: 'Timothy',
+            text: "Where do I sit?",
+            choices: [
+                { text: "[Back Row] The classic NPC spot.", outcome: 'class_back' },
+                { text: "[Front Row] Too eager. Dangerous.", outcome: 'class_front' },
+                { text: "[Middle] Acceptable camouflage.", outcome: 'class_middle' }
+            ]
+        }
+    ],
+    CLASS_BACK: [
+        { speaker: 'Timothy', text: "Safe. The back row is where dreams go to nap." },
+        { speaker: 'Mr. P', text: "Timothy? Since you're hiding in the back, tell us: What year did it fall?" },
+        {
+            speaker: 'Timothy',
+            text: "Oh no. A direct question.",
+            choices: [
+                { text: "'1453?' (Correct but boring)", outcome: 'answer_correct' },
+                { text: "'The year of our Lord?' (Too weird)", outcome: 'answer_weird' },
+                { text: "*Stare blankly* (Classic NPC)", outcome: 'answer_silence' }
+            ]
+        }
+    ],
+    CLASS_FRONT: [
+        { speaker: 'Timothy', text: "I take the front seat. Mr. P blinks at me." },
+        { speaker: 'Mr. P', text: "Enthusiasm! I like it. You're volunteering for the board?" },
+        { speaker: 'Timothy', text: "Mistake. Huge mistake." },
+        { speaker: 'System', text: "NPC Energy Decreased (Too Visible)" }
+    ],
+    CLASS_MIDDLE: [
+        { speaker: 'Timothy', text: "I blend into the mass of hoodies. Perfect." },
+        { speaker: 'System', text: "NPC Energy Stabilized." },
+        { speaker: 'Mr. P', text: "Alright, turning to page 394..." }
+    ],
+    ANSWER_CORRECT: [
+        { speaker: 'Mr. P', text: "Correct. Moving on." },
+        { speaker: 'Timothy', text: "Crisis averted. I am informative furniture." }
+    ],
+    ANSWER_WEIRD: [
+        { speaker: 'Mr. P', text: "...Right. Anyway." },
+        { speaker: 'Class', text: "*Quiet snickering*" },
+        { speaker: 'Timothy', text: "Great. Now I'm the 'weird kid' NPC." }
+    ],
+    ANSWER_SILENCE: [
+        { speaker: 'Mr. P', text: "Anyone else? Khristopher?" },
+        { speaker: 'Khristopher', text: "1922, technically." },
+        { speaker: 'Timothy', text: "Saved by the sidekick." }
+    ],
+
+    // CAFETERIA SCRIPTS
+    CAFETERIA_INTRO: [
+        { speaker: 'Timothy', text: "The Cafeteria. The social battlefield." },
+        { speaker: 'Khristopher', text: "There's a spot near the radiator. It smells like old milk, but it's free." },
+        { speaker: 'Tuesday', text: "I'm going to sit with the crows outside." },
+        { speaker: 'Timothy', text: "There are no crows, Tuesday." },
+        { speaker: 'Tuesday', text: "Not yet." }
+    ],
+
     // ENDING
     LOCKER_FOUND: [
         { speaker: 'Timothy', text: "Finally. Locker 404. Found it." },
@@ -642,6 +760,22 @@ const mom = new Mom(300, 300);
 const car = new Car(400, 290);
 const follower = new Khristopher(100, 300);
 const weirdGirl = new Tuesday(50, 300);
+
+// Home Objects
+class Furniture extends Entity {
+    constructor(x, y, w, h, c) { super(x, y, w, h, c); }
+    drawSprite(ctx, x, y) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(x, y, this.width, this.height);
+        // Detail
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(x+2, y+2, this.width-4, this.height-4);
+    }
+}
+const mirror = new Furniture(100, 250, 40, 80, '#add8e6');
+const bed = new Furniture(500, 280, 100, 50, '#e74c3c');
+const dresser = new Furniture(650, 260, 60, 80, '#8e44ad');
+const backpack = new Entity(520, 260, 20, 20, '#f39c12'); // On the bed
 
 // Hallway Objects
 const freddy = new Freddy(1800, 280); 
@@ -699,9 +833,16 @@ function update() {
     player.update();
 
     if (currentScene === SCENES.HOME) {
+        // Leave Check
         if (dialogueQueue.length === 0 && !interactionActive && keys.ArrowRight && player.x > 600) {
-             changeScene(SCENES.OUTSIDE);
+             if (GameState.flags.foundBackpack) {
+                 changeScene(SCENES.OUTSIDE);
+             } else {
+                 player.x = 600; // Stop player
+                 startDialogue(SCRIPTS.HOME_LEAVE_BLOCK);
+             }
         }
+        checkInteractions();
     } 
     else if (currentScene === SCENES.OUTSIDE) {
         follower.update(player.x);
@@ -731,35 +872,77 @@ function checkInteractions() {
     let interactionFound = false;
     const interactionDist = 60;
 
-    // Check Freddy
-    if (Math.abs(player.x - freddy.x) < interactionDist) {
-        uiPrompt.innerText = "PRESS SPACE";
-        uiPrompt.style.display = 'block';
-        pendingInteraction = () => startDialogue(SCRIPTS.NPC_FREDDY);
-        interactionFound = true;
-    }
-    // Check Locker
-    else if (Math.abs(player.x - targetLocker.x) < interactionDist) {
-        uiPrompt.innerText = "OPEN LOCKER";
-        uiPrompt.style.display = 'block';
-        pendingInteraction = () => startDialogue(SCRIPTS.LOCKER_FOUND);
-        interactionFound = true;
-    }
-    else {
-        // Check NPCs
-    const allNPCs = [...roamingNPCs, mindy];
-    for (let npc of allNPCs) {
-             if (Math.abs(player.x - npc.x) < interactionDist) {
-                uiPrompt.innerText = "TALK";
-                uiPrompt.style.display = 'block';
-                if (npc instanceof Weeb) pendingInteraction = () => startDialogue(SCRIPTS.NPC_WEEB);
-                else if (npc instanceof OddGirl) pendingInteraction = () => startDialogue(SCRIPTS.NPC_ODDGIRL);
-                else pendingInteraction = () => startDialogue(SCRIPTS.NPC_GENERIC);
+    uiPrompt.innerText = "PRESS SPACE"; // Default text
 
-                interactionFound = true;
-                break;
-             }
+    if (currentScene === SCENES.HOME) {
+        if (Math.abs(player.x - mirror.x) < 40) {
+            uiPrompt.style.display = 'block';
+            pendingInteraction = () => startDialogue(SCRIPTS.HOME_MIRROR);
+            interactionFound = true;
+        } else if (Math.abs(player.x - bed.x) < 50) {
+            uiPrompt.style.display = 'block';
+            if (!GameState.flags.foundBackpack) {
+                uiPrompt.innerText = "TAKE BAG";
+                pendingInteraction = () => {
+                    GameState.flags.foundBackpack = true;
+                    startDialogue(SCRIPTS.HOME_BACKPACK);
+                };
+            } else {
+                pendingInteraction = () => startDialogue(SCRIPTS.HOME_BED);
+            }
+            interactionFound = true;
+        } else if (Math.abs(player.x - dresser.x) < 40) {
+            uiPrompt.style.display = 'block';
+            pendingInteraction = () => startDialogue(SCRIPTS.HOME_DRESSER);
+            interactionFound = true;
         }
+    }
+    else if (currentScene === SCENES.HALLWAY) {
+        // Check Freddy
+        if (Math.abs(player.x - freddy.x) < interactionDist) {
+            uiPrompt.style.display = 'block';
+            pendingInteraction = () => startDialogue(SCRIPTS.NPC_FREDDY);
+            interactionFound = true;
+        }
+        // Check Locker
+        else if (Math.abs(player.x - targetLocker.x) < interactionDist) {
+            uiPrompt.innerText = "OPEN LOCKER";
+            uiPrompt.style.display = 'block';
+            pendingInteraction = () => startDialogue(SCRIPTS.LOCKER_FOUND);
+            interactionFound = true;
+        }
+        // Check Doors
+        else if (Math.abs(player.x - classDoor.x) < interactionDist) {
+            uiPrompt.innerText = "ENTER CLASS";
+            uiPrompt.style.display = 'block';
+            pendingInteraction = () => changeScene(SCENES.CLASSROOM);
+            interactionFound = true;
+        }
+        else if (Math.abs(player.x - cafeDoor.x) < interactionDist) {
+            uiPrompt.innerText = "ENTER LUNCH";
+            uiPrompt.style.display = 'block';
+            pendingInteraction = () => changeScene(SCENES.CAFETERIA);
+            interactionFound = true;
+        }
+        else {
+            // Check NPCs
+            const allNPCs = [...roamingNPCs, mindy];
+            for (let npc of allNPCs) {
+                 if (Math.abs(player.x - npc.x) < interactionDist) {
+                    uiPrompt.innerText = "TALK";
+                    uiPrompt.style.display = 'block';
+                    if (npc instanceof Weeb) pendingInteraction = () => startDialogue(SCRIPTS.NPC_WEEB);
+                    else if (npc instanceof OddGirl) pendingInteraction = () => startDialogue(SCRIPTS.NPC_ODDGIRL);
+                    else pendingInteraction = () => startDialogue(SCRIPTS.NPC_GENERIC);
+
+                    interactionFound = true;
+                    break;
+                 }
+            }
+        }
+    }
+    else if (currentScene === SCENES.CLASSROOM || currentScene === SCENES.CAFETERIA) {
+        // Placeholder for interactions in these rooms
     }
 
     if (!interactionFound) {
@@ -773,6 +956,10 @@ function draw() {
 
     if (currentScene === SCENES.HOME) {
         drawHomeBackground(ctx);
+        mirror.draw(ctx, 0);
+        bed.draw(ctx, 0);
+        dresser.draw(ctx, 0);
+        if (!GameState.flags.foundBackpack) backpack.draw(ctx, 0);
         mom.draw(ctx, 0);
         player.draw(ctx, 0);
     } 
@@ -785,6 +972,8 @@ function draw() {
     }
     else if (currentScene === SCENES.HALLWAY) {
         drawHallwayBackground(ctx, camera.x);
+        classDoor.draw(ctx, camera.x);
+        cafeDoor.draw(ctx, camera.x);
         roamingNPCs.forEach(npc => npc.draw(ctx, camera.x));
         daniel.draw(ctx, camera.x);
         mindy.draw(ctx, camera.x);
@@ -792,6 +981,15 @@ function draw() {
         follower.draw(ctx, camera.x);
         player.draw(ctx, camera.x);
         freddy.draw(ctx, camera.x);
+    }
+    else if (currentScene === SCENES.CLASSROOM) {
+        ctx.fillStyle = '#f5b7b1'; ctx.fillRect(0,0,800,450); // Simple bg
+        player.draw(ctx, 0);
+        // Placeholder for now
+    }
+    else if (currentScene === SCENES.CAFETERIA) {
+        ctx.fillStyle = '#abebc6'; ctx.fillRect(0,0,800,450); // Simple bg
+        player.draw(ctx, 0);
     }
 }
 
@@ -892,6 +1090,14 @@ function handleChoice(outcome) {
     
     if (outcome === 'stealth') nextLines = SCRIPTS.HALLWAY_STEALTH;
     if (outcome === 'strut') nextLines = SCRIPTS.HALLWAY_STRUT;
+
+    // New Outcomes
+    if (outcome === 'class_back') nextLines = SCRIPTS.CLASS_BACK;
+    if (outcome === 'class_front') { nextLines = SCRIPTS.CLASS_FRONT; updateEnergy(-10); }
+    if (outcome === 'class_middle') { nextLines = SCRIPTS.CLASS_MIDDLE; updateEnergy(5); }
+    if (outcome === 'answer_correct') nextLines = SCRIPTS.ANSWER_CORRECT;
+    if (outcome === 'answer_weird') { nextLines = SCRIPTS.ANSWER_WEIRD; updateEnergy(-5); }
+    if (outcome === 'answer_silence') { nextLines = SCRIPTS.ANSWER_SILENCE; updateEnergy(10); }
     
     // Add to queue
     dialogueQueue = [...nextLines, ...dialogueQueue];
