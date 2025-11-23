@@ -48,9 +48,36 @@
             justify-content: space-between;
         }
 
+        #energy-bar-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 200px;
+            height: 20px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #555;
+            padding: 2px;
+        }
+
+        #energy-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e67e22, #f1c40f);
+            width: 50%;
+            transition: width 0.5s;
+        }
+
+        #energy-label {
+            position: absolute;
+            top: -15px;
+            right: 0;
+            font-size: 10px;
+            color: #ccc;
+        }
+
         #dialogue-box {
-            background: #000;
-            border-top: 4px solid white;
+            background: rgba(0, 0, 0, 0.9);
+            border-top: 4px solid #fff;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.5);
             padding: 20px;
             min-height: 160px;
             display: none; 
@@ -59,6 +86,8 @@
             bottom: 0;
             width: 100%;
             box-sizing: border-box;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
         }
 
         .char-name {
@@ -139,8 +168,9 @@
         <div id="fade-overlay"></div>
         
         <div id="ui-layer">
-            <div id="energy-meter" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 5px; border: 2px solid #555; font-size: 10px; color: #fff;">
-                NPC ENERGY: <span id="energy-val">50</span>%
+            <div id="energy-bar-container">
+                <div id="energy-label">NPC ENERGY</div>
+                <div id="energy-bar-fill"></div>
             </div>
             <div id="interaction-prompt">PRESS SPACE</div>
 
@@ -160,6 +190,33 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false; 
+
+// --- CONFIGURATION ---
+const CONFIG = {
+    COLORS: {
+        BG: '#111',
+        WHITE: '#fff',
+        BLACK: '#000',
+        UI_BORDER: '#555',
+        UI_HIGHLIGHT: '#f0e68c',
+        PLAYER_MAIN: '#3498db',
+        PLAYER_PANTS: '#2c3e50',
+        PLAYER_SKIN: '#f1c27d',
+        PLAYER_HAIR: '#5d4037',
+        MOM_MAIN: '#8e44ad',
+        MOM_CLOTHES: '#9b59b6',
+        KHRIS_MAIN: '#111',
+        HOME_BG_WALL: '#d7bde2',
+        HOME_BG_FLOOR: '#a1887f',
+        OUTSIDE_SKY: '#85c1e9',
+        OUTSIDE_GRASS: '#95a5a6'
+    },
+    PHYSICS: {
+        ACCELERATION: 0.5,
+        FRICTION: 0.8,
+        MAX_SPEED: 4
+    }
+};
 
 // --- SCENE MANAGEMENT ---
 const SCENES = {
@@ -197,8 +254,8 @@ function updateEnergy(amount) {
     if (GameState.npcEnergy > 100) GameState.npcEnergy = 100;
     if (GameState.npcEnergy < 0) GameState.npcEnergy = 0;
 
-    const uiEnergy = document.getElementById('energy-val');
-    if(uiEnergy) uiEnergy.innerText = GameState.npcEnergy;
+    const uiBar = document.getElementById('energy-bar-fill');
+    if(uiBar) uiBar.style.width = GameState.npcEnergy + "%";
 }
 
 // --- INPUT ---
@@ -224,6 +281,44 @@ window.addEventListener('keyup', (e) => {
 
 // --- CAMERA ---
 const camera = { x: 0, y: 0 };
+
+// --- PARTICLES ---
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 3 + 2;
+        this.vx = (Math.random() - 0.5) * 1;
+        this.vy = -Math.random() * 1 - 0.5;
+        this.life = 1.0;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= 0.05;
+    }
+    draw(ctx, camX) {
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = this.life;
+        ctx.fillRect(this.x - camX, this.y, this.size, this.size);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+let particles = [];
+
+function spawnParticles(x, y, color, count = 1) {
+    for(let i=0; i<count; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+// --- CLOUDS ---
+const clouds = [];
+for(let i=0; i<5; i++) {
+    clouds.push({ x: Math.random() * 800, y: Math.random() * 100, speed: Math.random() * 0.5 + 0.1 });
+}
 
 // --- SPRITE HELPERS ---
 function drawPixelRect(ctx, x, y, width, height, color) {
@@ -271,8 +366,11 @@ class Entity {
 
 class Timothy extends Entity {
     constructor(x, y) {
-        super(x, y, 30, 58, '#3498db'); 
-        this.speed = 3;
+        super(x, y, 30, 58, CONFIG.COLORS.PLAYER_MAIN);
+        this.speed = 0;
+        this.maxSpeed = CONFIG.PHYSICS.MAX_SPEED;
+        this.accel = CONFIG.PHYSICS.ACCELERATION;
+        this.friction = CONFIG.PHYSICS.FRICTION;
     }
 
     update() {
@@ -281,16 +379,31 @@ class Timothy extends Entity {
             return;
         }
 
-        this.isMoving = false;
+        // Acceleration
         if (keys.ArrowRight || keys.KeyD) {
-            this.x += this.speed;
+            this.speed += this.accel;
             this.direction = 1;
-            this.isMoving = true;
-        }
-        if (keys.ArrowLeft || keys.KeyA) {
-            this.x -= this.speed;
+        } else if (keys.ArrowLeft || keys.KeyA) {
+            this.speed -= this.accel;
             this.direction = -1;
-            this.isMoving = true;
+        } else {
+            // Friction
+            this.speed *= this.friction;
+        }
+
+        // Clamp Speed
+        if (this.speed > this.maxSpeed) this.speed = this.maxSpeed;
+        if (this.speed < -this.maxSpeed) this.speed = -this.maxSpeed;
+
+        // Apply
+        this.x += this.speed;
+
+        // Visual State
+        this.isMoving = Math.abs(this.speed) > 0.1;
+
+        // Particles
+        if (this.isMoving && frameCount % 10 === 0) {
+            spawnParticles(this.x + 15, this.y + 58, '#bdc3c7');
         }
         
         // Scene Bounds
@@ -300,8 +413,8 @@ class Timothy extends Entity {
         if (currentScene === SCENES.CLASSROOM) maxW = 800;
         if (currentScene === SCENES.CAFETERIA) maxW = 1200;
 
-        if (this.x < 0) this.x = 0;
-        if (this.x > maxW) this.x = maxW;
+        if (this.x < 0) { this.x = 0; this.speed = 0; }
+        if (this.x > maxW) { this.x = maxW; this.speed = 0; }
     }
 
     drawSprite(ctx, x, y) {
@@ -319,7 +432,7 @@ class Timothy extends Entity {
 
 class Khristopher extends Entity {
     constructor(x, y) {
-        super(x, y, 48, 85, '#111'); 
+        super(x, y, 48, 85, CONFIG.COLORS.KHRIS_MAIN);
     }
 
     update(targetX) {
@@ -386,11 +499,11 @@ class Tuesday extends Entity {
 
 class Mom extends Entity {
     constructor(x, y) {
-        super(x, y, 32, 56, '#8e44ad');
+        super(x, y, 32, 56, CONFIG.COLORS.MOM_MAIN);
     }
     drawSprite(ctx, x, y) {
         // Mom: Tired, messy bun, house clothes
-        drawPixelRect(ctx, x + 4, y + 20, 24, 20, '#9b59b6'); 
+        drawPixelRect(ctx, x + 4, y + 20, 24, 20, CONFIG.COLORS.MOM_CLOTHES);
         drawPixelRect(ctx, x + 4, y + 40, 24, 16, '#2c3e50'); 
         drawPixelRect(ctx, x + 6, y, 20, 20, '#e6b0aa'); 
         drawPixelRect(ctx, x + 4, y - 6, 24, 10, '#5d4037'); 
@@ -511,9 +624,9 @@ class Locker extends Entity {
 
 // --- SCENE ASSETS ---
 function drawHomeBackground(ctx) {
-    ctx.fillStyle = '#d7bde2'; 
+    ctx.fillStyle = CONFIG.COLORS.HOME_BG_WALL;
     ctx.fillRect(0, 0, 800, 350);
-    ctx.fillStyle = '#a1887f'; 
+    ctx.fillStyle = CONFIG.COLORS.HOME_BG_FLOOR;
     ctx.fillRect(0, 350, 800, 100);
     ctx.fillStyle = '#85c1e9';
     ctx.fillRect(100, 100, 150, 150);
@@ -525,12 +638,19 @@ function drawHomeBackground(ctx) {
 }
 
 function drawOutsideBackground(ctx) {
-    ctx.fillStyle = '#85c1e9';
+    ctx.fillStyle = CONFIG.COLORS.OUTSIDE_SKY;
     ctx.fillRect(0,0,800,500);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(100, 50, 80, 30);
-    ctx.fillRect(500, 80, 120, 40);
-    ctx.fillStyle = '#95a5a6';
+
+    // Clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    clouds.forEach(cloud => {
+        cloud.x += cloud.speed;
+        if (cloud.x > 800) cloud.x = -100;
+        ctx.fillRect(cloud.x, cloud.y, 60, 20);
+        ctx.fillRect(cloud.x + 20, cloud.y - 10, 40, 20);
+    });
+
+    ctx.fillStyle = CONFIG.COLORS.OUTSIDE_GRASS;
     ctx.fillRect(0, 350, 800, 100);
     ctx.fillStyle = '#c0392b'; 
     ctx.fillRect(500, 150, 300, 200);
@@ -861,7 +981,9 @@ function update() {
         
         checkInteractions();
 
-        camera.x = player.x - 200;
+        // Smooth Camera (Lerp)
+        const targetCamX = player.x - 200;
+        camera.x += (targetCamX - camera.x) * 0.1;
         if (camera.x < 0) camera.x = 0;
     }
 }
@@ -954,6 +1076,12 @@ function checkInteractions() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Update Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        if (particles[i].life <= 0) particles.splice(i, 1);
+    }
+
     if (currentScene === SCENES.HOME) {
         drawHomeBackground(ctx);
         mirror.draw(ctx, 0);
@@ -991,6 +1119,9 @@ function draw() {
         ctx.fillStyle = '#abebc6'; ctx.fillRect(0,0,800,450); // Simple bg
         player.draw(ctx, 0);
     }
+
+    // Draw Particles on top
+    particles.forEach(p => p.draw(ctx, camera.x));
 }
 
 // --- DIALOGUE SYSTEM ---
