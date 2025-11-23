@@ -918,54 +918,130 @@ function endDialogue() {
     uiDialogue.style.display = 'none';
 }
 
-// --- START SCREEN ---
-const startScreen = document.createElement('div');
-startScreen.id = 'start-screen';
-startScreen.style.position = 'absolute';
-startScreen.style.top = '0';
-startScreen.style.left = '0';
-startScreen.style.width = '100%';
-startScreen.style.height = '100%';
-startScreen.style.backgroundColor = '#000';
-startScreen.style.display = 'flex';
-startScreen.style.flexDirection = 'column';
-startScreen.style.justifyContent = 'center';
-startScreen.style.alignItems = 'center';
-startScreen.style.zIndex = '1000';
+// --- MENU SYSTEM ---
+function createMenuButton(text, onClick) {
+    const btn = document.createElement('button');
+    btn.innerText = text;
+    btn.style.padding = '10px 20px';
+    btn.style.fontSize = '14px';
+    btn.style.fontFamily = "'Press Start 2P', monospace";
+    btn.style.cursor = 'pointer';
+    btn.style.background = '#222';
+    btn.style.border = '2px solid #555';
+    btn.style.color = 'white';
+    btn.style.marginBottom = '10px';
+    btn.style.width = '200px';
+
+    btn.onmouseover = () => {
+        btn.style.background = '#444';
+        btn.style.borderColor = '#f0e68c';
+    };
+    btn.onmouseout = () => {
+        btn.style.background = '#222';
+        btn.style.borderColor = '#555';
+    };
+    btn.onclick = onClick;
+    return btn;
+}
+
+const menuContainer = document.createElement('div');
+menuContainer.id = 'menu-overlay';
+Object.assign(menuContainer.style, {
+    position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+    backgroundColor: '#000', display: 'flex', flexDirection: 'column',
+    justifyContent: 'center', alignItems: 'center', zIndex: '1000'
+});
 
 const title = document.createElement('h1');
 title.innerText = 'NPC ENERGY';
 title.style.color = '#f0e68c';
 title.style.fontSize = '40px';
-title.style.marginBottom = '20px';
+title.style.marginBottom = '10px';
 
 const subtitle = document.createElement('p');
 subtitle.innerText = 'Chapter 1: The Hallway';
 subtitle.style.color = '#fff';
-subtitle.style.fontSize = '16px';
+subtitle.style.fontSize = '12px';
 subtitle.style.marginBottom = '40px';
 
-const startBtn = document.createElement('button');
-startBtn.innerText = 'PRESS START';
-startBtn.style.padding = '15px 30px';
-startBtn.style.fontSize = '16px';
-startBtn.style.fontFamily = "'Press Start 2P', monospace";
-startBtn.style.cursor = 'pointer';
-startBtn.style.background = '#3498db';
-startBtn.style.border = 'none';
-startBtn.style.color = 'white';
+// Views
+const mainMenuView = document.createElement('div');
+mainMenuView.style.display = 'flex';
+mainMenuView.style.flexDirection = 'column';
+mainMenuView.style.alignItems = 'center';
 
-startBtn.onclick = startGame;
+const controlsView = document.createElement('div');
+controlsView.style.display = 'none';
+controlsView.style.flexDirection = 'column';
+controlsView.style.alignItems = 'center';
+controlsView.style.textAlign = 'center';
+controlsView.innerHTML = `
+    <h2 style="color:#f0e68c; margin-bottom:20px">CONTROLS</h2>
+    <p style="margin-bottom:10px; font-size:12px">WASD / ARROWS : MOVE</p>
+    <p style="margin-bottom:30px; font-size:12px">SPACE : INTERACT</p>
+`;
 
-startScreen.appendChild(title);
-startScreen.appendChild(subtitle);
-startScreen.appendChild(startBtn);
-document.getElementById('game-container').appendChild(startScreen);
+const creditsView = document.createElement('div');
+creditsView.style.display = 'none';
+creditsView.style.flexDirection = 'column';
+creditsView.style.alignItems = 'center';
+creditsView.style.textAlign = 'center';
+creditsView.innerHTML = `
+    <h2 style="color:#f0e68c; margin-bottom:20px">CREDITS</h2>
+    <p style="margin-bottom:10px; font-size:12px">Created by</p>
+    <p style="margin-bottom:20px; color:#3498db; font-size:14px">Jules</p>
+    <p style="margin-bottom:30px; font-size:10px">Powered by NPC Energy Engine</p>
+`;
 
+// Navigation Functions
+function showView(view) {
+    mainMenuView.style.display = 'none';
+    controlsView.style.display = 'none';
+    creditsView.style.display = 'none';
+    view.style.display = 'flex';
+}
+
+// Main Menu Buttons
+const btnStart = createMenuButton('START GAME', startGame);
+const btnControls = createMenuButton('CONTROLS', () => showView(controlsView));
+const btnCredits = createMenuButton('CREDITS', () => showView(creditsView));
+const btnFullscreen = createMenuButton('FULLSCREEN', toggleFullscreen);
+
+mainMenuView.appendChild(btnStart);
+mainMenuView.appendChild(btnControls);
+mainMenuView.appendChild(btnCredits);
+mainMenuView.appendChild(btnFullscreen);
+
+// Back Buttons
+const btnBackControls = createMenuButton('BACK', () => showView(mainMenuView));
+controlsView.appendChild(btnBackControls);
+
+const btnBackCredits = createMenuButton('BACK', () => showView(mainMenuView));
+creditsView.appendChild(btnBackCredits);
+
+// Assemble Menu
+menuContainer.appendChild(title);
+menuContainer.appendChild(subtitle);
+menuContainer.appendChild(mainMenuView);
+menuContainer.appendChild(controlsView);
+menuContainer.appendChild(creditsView);
+
+document.getElementById('game-container').appendChild(menuContainer);
+
+function toggleFullscreen() {
+    const elem = document.getElementById('game-container');
+    if (!document.fullscreenElement) {
+        elem.requestFullscreen().catch(err => {
+            console.log(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+    } else {
+        document.exitFullscreen();
+    }
+}
 
 // --- INIT ---
 function startGame() {
-    startScreen.style.display = 'none';
+    menuContainer.style.display = 'none';
     setTimeout(() => document.getElementById('fade-overlay').style.opacity = 0, 500);
 
     // Initialize Game State
